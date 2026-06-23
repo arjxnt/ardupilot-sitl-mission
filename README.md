@@ -1,11 +1,37 @@
 # ArduPilot SITL Search & Orbit
 
-A pymavlink script that flies a simulated ArduCopter through an expanding-square
-search pattern, detects a hardcoded target geofence, breaks off to orbit it,
-then RTLs and lands. Runs against ArduPilot's SITL simulator.
+A Python script that autonomously flies a *simulated* drone through a search
+pattern, recognizes when it's found a target, and circles it.
 
-ArduPilot's `waf` build doesn't run natively on Windows, so you'll need
-WSL2/Ubuntu or another Linux box.
+## What this actually does
+
+- **SITL** (Software In The Loop) is ArduPilot's drone simulator — it runs a
+  full virtual flight controller on your computer so you can test autonomous
+  flight without a real drone.
+- **pymavlink** is a Python library for talking to that flight controller
+  using **MAVLink**, the messaging protocol drones use (telemetry in,
+  commands out).
+- The script connects to the simulator, takes off, and flies an
+  **expanding-square search pattern** — a real search-and-rescue technique
+  where the drone flies in an outward-growing square spiral to cover ground
+  systematically.
+- It has a hardcoded "target" location (just GPS coordinates) with a radius
+  around it. While searching, the script keeps checking the drone's current
+  position against that target.
+- The moment the drone gets close enough to the target, it abandons the
+  search pattern and flies in a circle ("orbit") around it — like a drone
+  would do to keep a camera trained on something it found — and prints out
+  the target's coordinates with a timestamp, as if logging a detection.
+- Once that's done, it sends the drone home and lands.
+
+This is a simulation/demo project, not a connection to a real aircraft.
+
+## Before you start
+
+ArduPilot's build tool (`waf`) doesn't work natively on Windows, so you need
+a Linux environment. The easiest way on Windows is **WSL2** (Windows
+Subsystem for Linux), which lets you run a real Ubuntu Linux install inside
+Windows.
 
 ## Setup
 
@@ -32,8 +58,10 @@ cd ~/ardupilot/ArduCopter
 ../Tools/autotest/sim_vehicle.py --vehicle ArduCopter --console --map
 ```
 
-This starts MAVProxy and streams MAVLink on `udp:127.0.0.1:14550`, which is
-what the script connects to. Leave it running.
+This starts MAVProxy (a ground-control relay tool) and streams MAVLink data
+on `udp:127.0.0.1:14550` — a local network address on your own machine. The
+script connects to that address to send/receive commands. Leave this
+terminal running the whole time; it's your simulated drone.
 
 Default home is CMAC (-35.363261, 149.165230). If you start SITL with
 `--custom-location`, update `SEARCH_CENTER_LAT/LON` and `TARGET_LAT/LON` in
@@ -48,9 +76,17 @@ pip install -r requirements.txt
 python3 search_and_orbit.py
 ```
 
-Arms, takes off to 30m in GUIDED, flies the search pattern, and if it gets
-within `TARGET_RADIUS_M` of the target it breaks off, orbits at 15m, and
-logs the detection with a timestamp. Then RTL and land.
+What happens, in order:
+1. **Arms** the drone (enables the motors — a safety step drones require
+   before they'll fly) and switches to **GUIDED mode** (lets a script
+   command the drone directly, instead of a human pilot or a pre-set
+   mission).
+2. Takes off to 30m and starts flying the search pattern.
+3. If it gets within `TARGET_RADIUS_M` of the target coordinates, it stops
+   searching, orbits the target at 15m, and prints a timestamped log entry
+   with the target's exact GPS position.
+4. Sends an **RTL** (Return To Launch) command, which tells the drone to fly
+   back to its takeoff point and land itself automatically.
 
 To force a quick detection, shrink `LEG_UNIT_M` so the pattern sweeps closer
 to `TARGET_LAT/LON`, or move the target onto the generated path.
