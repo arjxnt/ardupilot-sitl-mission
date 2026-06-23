@@ -42,8 +42,12 @@ LEG_UNIT_M = 40.0                # base leg length, grows each pass
 NUM_LEGS = 12                     # how many legs of the square to fly
 
 # Hardcoded "target" geofence: a small circle the vehicle treats as a find.
-TARGET_LAT = -35.361500
-TARGET_LON = 149.167000
+# These coordinates sit directly on leg 6 of the default search pattern below
+# (verified against build_expanding_square(SEARCH_CENTER_LAT, SEARCH_CENTER_LON,
+# LEG_UNIT_M, NUM_LEGS)) so a default run actually triggers a detection instead
+# of completing the whole search with nothing found.
+TARGET_LAT = -35.362542
+TARGET_LON = 149.166111
 TARGET_RADIUS_M = 25.0           # entering this circle = "target detected"
 
 ORBIT_RADIUS_M = 15.0
