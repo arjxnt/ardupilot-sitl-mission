@@ -33,6 +33,9 @@ def main():
                          help="MAVLink connection string (--backend mavlink only)")
     parser.add_argument("--plot", default=None,
                          help="Path to save a PNG of the flight path (requires matplotlib)")
+    parser.add_argument("--export-json", default=None,
+                         help="Path to save mission data (flight log + events) as JSON "
+                              "for the web dashboard in dashboard/")
     args = parser.parse_args()
 
     cfg = MissionConfig(
@@ -61,6 +64,16 @@ def main():
         plot_flight_log(result.flight_log, TARGET_LAT, TARGET_LON,
                          cfg.target_radius_m, args.plot)
         print(f"Flight path plotted to {args.plot}")
+
+    if args.export_json:
+        from missionlib.export import export_mission_json
+        export_mission_json(
+            result, cfg,
+            home_lat=SEARCH_CENTER_LAT, home_lon=SEARCH_CENTER_LON,
+            target_lat=TARGET_LAT, target_lon=TARGET_LON,
+            out_path=args.export_json,
+        )
+        print(f"Mission data exported to {args.export_json}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Mission Control — Search &amp; Orbit</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    --bg: #0a0e14;
+    --panel: #0f1622;
+    --panel-border: #1c2738;
+    --text: #d7e1ec;
+    --text-dim: #6b7d93;
+    --accent: #3fd0ff;
+    --accent-dim: #1a4a5c;
+    --green: #35d68a;
+    --red: #ff4d6d;
+    --amber: #ffb347;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Consolas", "SF Mono", "Courier New", monospace;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #app {
+    display: grid;
+    grid-template-columns: 340px 1fr 320px;
+    grid-template-rows: 56px 1fr 64px;
+    grid-template-areas:
+      "header header header"
+      "stats map log"
+      "stats timeline log";
+    height: 100vh;
+  }
+  header {
+    grid-area: header;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--panel-border);
+  }
+  header .title {
+    font-size: 14px;
+    letter-spacing: 3px;
+    color: var(--accent);
+  }
+  header .title span { color: var(--text-dim); }
+  #status-badge {
+    font-size: 12px;
+    letter-spacing: 2px;
+    padding: 6px 14px;
+    border-radius: 3px;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    transition: all 0.2s;
+  }
+  #status-badge.detected {
+    border-color: var(--red);
+    color: var(--red);
+    background: rgba(255, 77, 109, 0.08);
+    animation: pulse 1s infinite;
+  }
+  #status-badge.orbiting {
+    border-color: var(--amber);
+    color: var(--amber);
+  }
+  #status-badge.landed {
+    border-color: var(--green);
+    color: var(--green);
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  #stats {
+    grid-area: stats;
+    background: var(--panel);
+    border-right: 1px solid var(--panel-border);
+    padding: 18px;
+    overflow-y: auto;
+  }
+  .stat-card {
+    border: 1px solid var(--panel-border);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    background: #0c121c;
+  }
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 20px;
+    color: var(--text);
+  }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.small { font-size: 13px; }
+  #map { grid-area: map; }
+  #log {
+    grid-area: log;
+    background: var(--panel);
+    border-left: 1px solid var(--panel-border);
+    padding: 14px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  #log h3 {
+    font-size: 11px;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin: 0 0 10px 0;
+  }
+  .log-entry {
+    border-left: 2px solid var(--panel-border);
+    padding: 4px 0 4px 10px;
+    margin-bottom: 6px;
+    color: var(--text-dim);
+  }
+  .log-entry.active {
+    border-left-color: var(--accent);
+    color: var(--text);
+  }
+  .log-entry.alert {
+    border-left-color: var(--red);
+    color: var(--red);
+  }
+  .log-time {
+    color: var(--text-dim);
+    font-size: 10px;
+    display: block;
+  }
+  #timeline {
+    grid-area: timeline;
+    background: var(--panel);
+    border-top: 1px solid var(--panel-border);
+    border-right: 1px solid var(--panel-border);
+    display: flex;
+    align-items: center;
+    padding: 0 18px;
+    gap: 14px;
+  }
+  #play-btn {
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 4px;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  #scrubber {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  #leaflet-container { background: #0a0e14 !important; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title">MISSION CONTROL <span>// SEARCH &amp; ORBIT</span></div>
+    <div id="status-badge">INITIALIZING</div>
+  </header>
+
+  <div id="stats">
+    <div class="stat-card">
+      <div class="stat-label">FLIGHT PHASE</div>
+      <div class="stat-value accent" id="stat-phase">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">ALTITUDE</div>
+      <div class="stat-value" id="stat-alt">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">POSITION</div>
+      <div class="stat-value small" id="stat-pos">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">DISTANCE TO TARGET</div>
+      <div class="stat-value" id="stat-dist">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">TARGET FIX</div>
+      <div class="stat-value small" id="stat-target">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">TIMELINE</div>
+      <div class="stat-value small" id="stat-progress">-</div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <div id="log">
+    <h3>EVENT LOG</h3>
+    <div id="log-entries"></div>
+  </div>
+
+  <div id="timeline">
+    <button id="play-btn">&#9654;</button>
+    <input type="range" id="scrubber" min="0" max="100" value="0">
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+async function main() {
+  const res = await fetch("mission_data.json");
+  const data = await res.json();
+
+  const log = data.flight_log;
+  const home = data.home;
+  const target = data.target;
+
+  // --- map setup ---
+  const map = L.map("map", { zoomControl: true }).setView([home.lat, home.lon], 16);
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: "&copy; OpenStreetMap &copy; CARTO",
+    maxZoom: 19,
+  }).addTo(map);
+
+  const searchPts = log.filter(p => p.phase === "search").map(p => [p.lat, p.lon]);
+  const orbitPts = log.filter(p => p.phase === "orbit").map(p => [p.lat, p.lon]);
+
+  L.polyline(searchPts, { color: "#3fd0ff", weight: 2, opacity: 0.8 }).addTo(map);
+  if (orbitPts.length) {
+    L.polyline(orbitPts, { color: "#ff4d6d", weight: 2, opacity: 0.9 }).addTo(map);
+  }
+  L.circle([target.lat, target.lon], {
+    radius: target.radius_m, color: "#35d68a", fill: false, dashArray: "6,6",
+  }).addTo(map);
+  L.circleMarker([target.lat, target.lon], { radius: 5, color: "#35d68a" })
+    .bindTooltip("Target").addTo(map);
+  L.marker([home.lat, home.lon]).bindTooltip("Home / Launch").addTo(map);
+
+  const droneIcon = L.divIcon({
+    className: "",
+    html: '<div style="width:14px;height:14px;border-radius:50%;background:#3fd0ff;' +
+          'box-shadow:0 0 12px 4px rgba(63,208,255,0.7);border:2px solid #fff;"></div>',
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+  });
+  const droneMarker = L.marker([log[0].lat, log[0].lon], { icon: droneIcon }).addTo(map);
+
+  // --- stats / scrubber wiring ---
+  const scrubber = document.getElementById("scrubber");
+  const playBtn = document.getElementById("play-btn");
+  scrubber.max = log.length - 1;
+
+  const statusBadge = document.getElementById("status-badge");
+  const statPhase = document.getElementById("stat-phase");
+  const statAlt = document.getElementById("stat-alt");
+  const statPos = document.getElementById("stat-pos");
+  const statDist = document.getElementById("stat-dist");
+  const statTarget = document.getElementById("stat-target");
+  const statProgress = document.getElementById("stat-progress");
+  const logEntries = document.getElementById("log-entries");
+
+  statTarget.textContent = target.lat.toFixed(5) + ", " + target.lon.toFixed(5);
+
+  function distanceM(lat1, lon1, lat2, lon2) {
+    const R = 6378137;
+    const toRad = d => d * Math.PI / 180;
+    const x = (toRad(lon2) - toRad(lon1)) * Math.cos(toRad((lat1 + lat2) / 2));
+    const y = toRad(lat2) - toRad(lat1);
+    return Math.sqrt(x * x + y * y) * R;
+  }
+
+  data.events.forEach((evt, i) => {
+    const div = document.createElement("div");
+    div.className = "log-entry" + (evt.message.includes("DETECTED") ? " alert" : "");
+    div.id = "evt-" + i;
+    div.innerHTML = '<span class="log-time">' + evt.time + "</span>" + evt.message;
+    logEntries.appendChild(div);
+  });
+
+  function render(idx) {
+    const p = log[idx];
+    droneMarker.setLatLng([p.lat, p.lon]);
+    statPhase.textContent = p.phase.toUpperCase();
+    statAlt.textContent = p.alt.toFixed(1) + " m";
+    statPos.textContent = p.lat.toFixed(6) + ", " + p.lon.toFixed(6);
+    const d = distanceM(p.lat, p.lon, target.lat, target.lon);
+    statDist.textContent = d.toFixed(1) + " m";
+    statProgress.textContent = (idx + 1) + " / " + log.length;
+
+    const detected = log.slice(0, idx + 1).some(pt => pt.phase === "orbit");
+    statusBadge.className = "";
+    if (p.phase === "orbit") {
+      statusBadge.textContent = "ORBITING TARGET";
+      statusBadge.className = "orbiting";
+    } else if (detected) {
+      statusBadge.textContent = "TARGET DETECTED";
+      statusBadge.className = "detected";
+    } else if (idx === log.length - 1) {
+      statusBadge.textContent = "MISSION COMPLETE";
+      statusBadge.className = "landed";
+    } else {
+      statusBadge.textContent = "SEARCHING";
+    }
+
+    const elapsedFraction = idx / (log.length - 1);
+    const activeEventIdx = Math.floor(elapsedFraction * (data.events.length - 1));
+    document.querySelectorAll(".log-entry").forEach((el, i) => {
+      el.classList.toggle("active", i === activeEventIdx);
+    });
+  }
+
+  render(0);
+
+  let playing = false;
+  let timer = null;
+  scrubber.addEventListener("input", () => render(parseInt(scrubber.value, 10)));
+
+  playBtn.addEventListener("click", () => {
+    playing = !playing;
+    playBtn.innerHTML = playing ? "&#10073;&#10073;" : "&#9654;";
+    if (playing) {
+      timer = setInterval(() => {
+        let v = parseInt(scrubber.value, 10) + 1;
+        if (v > log.length - 1) { v = 0; }
+        scrubber.value = v;
+        render(v);
+      }, 25);
+    } else {
+      clearInterval(timer);
+    }
+  });
+}
+
+main();
+</script>
+</body>
+</html>

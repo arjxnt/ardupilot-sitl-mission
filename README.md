@@ -165,6 +165,27 @@ To run the automated test suite the same way:
 pytest tests/ -v
 ```
 
+## Mission Control dashboard
+
+There is also a live, browser-based dashboard in `dashboard/`, styled as a
+dark command-center display rather than a plain chart. It plays back a
+real recorded mission (not fake data) on an actual map: the search pattern,
+the live drone marker, the target geofence, the orbit once detected, a
+timestamped event log, and a status badge that flips from SEARCHING to
+TARGET DETECTED to ORBITING TARGET to MISSION COMPLETE as the timeline
+scrubber moves. It is a static page, no build step and no API key
+required, using free OpenStreetMap tiles.
+
+To generate fresh mission data and view it:
+
+```bash
+python run_mission.py --backend sim --export-json dashboard/mission_data.json
+python -m http.server 8000 --directory dashboard
+```
+
+Then open `http://localhost:8000` in a browser. Drag the timeline slider at
+the bottom or press play to watch the recorded flight unfold in real time.
+
 ## Running it against a real ArduPilot simulator
 
 This is the harder path, and it's optional: the sim backend above already
